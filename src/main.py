@@ -3,7 +3,11 @@ import chromadb
 import streamlit as st
 import google.generativeai as genai
 from dotenv import load_dotenv
+from pypdf import PdfReader
 
+# -----------------------------
+# CONFIG
+# -----------------------------
 load_dotenv()
 
 genai.configure(
@@ -14,14 +18,110 @@ model = genai.GenerativeModel(
     "gemini-2.5-flash"
 )
 
+DATA_DIR = "data"
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
+
+# -----------------------------
+# PDF READING
+# -----------------------------
+def read_pdfs():
+    docs = []
+
+    if not os.path.exists(DATA_DIR):
+        return docs
+
+    for file in os.listdir(DATA_DIR):
+        if file.endswith(".pdf"):
+
+            pdf_path = os.path.join(DATA_DIR, file)
+
+            reader = PdfReader(pdf_path)
+
+            for page_num, page in enumerate(reader.pages):
+                text = page.extract_text()
+
+                if text:
+                    docs.append({
+                        "text": text,
+                        "source": file,
+                        "page": page_num + 1
+                    })
+
+    return docs
+
+
+# -----------------------------
+# CHUNKING
+# -----------------------------
+def chunk_text(text):
+    chunks = []
+
+    start = 0
+
+    while start < len(text):
+        end = start + CHUNK_SIZE
+
+        chunks.append(text[start:end])
+
+        start += CHUNK_SIZE - CHUNK_OVERLAP
+
+    return chunks
+
+
+# -----------------------------
+# BUILD DATABASE
+# -----------------------------
+def build_database(collection):
+
+    docs = read_pdfs()
+
+    all_chunks = []
+
+    for doc in docs:
+        chunks = chunk_text(doc["text"])
+
+        for chunk in chunks:
+            all_chunks.append({
+                "text": chunk,
+                "source": doc["source"],
+                "page": doc["page"]
+            })
+
+    if len(all_chunks) == 0:
+        return
+
+    collection.add(
+        documents=[c["text"] for c in all_chunks],
+        ids=[f"chunk_{i}" for i in range(len(all_chunks))],
+        metadatas=[
+            {
+                "source": c["source"],
+                "page": c["page"]
+            }
+            for c in all_chunks
+        ]
+    )
+
+
+# -----------------------------
+# CHROMADB
+# -----------------------------
 client = chromadb.PersistentClient(
     path="db"
 )
 
-collection = client.get_collection(
-    "document_knowledge_base"
+collection = client.get_or_create_collection(
+    name="document_knowledge_base"
 )
 
+# Auto build DB if empty
+if collection.count() == 0:
+    build_database(collection)
+
+# -----------------------------
+# UI
+# -----------------------------
 st.title("📄 Document Q&A Bot")
 
 question = st.text_input(
@@ -29,6 +129,10 @@ question = st.text_input(
 )
 
 if st.button("Submit"):
+
+    if question.strip() == "":
+        st.warning("Please enter a question.")
+        st.stop()
 
     results = collection.query(
         query_texts=[question],
@@ -40,18 +144,20 @@ if st.button("Submit"):
     )
 
     prompt = f"""
-    Answer only from context.
+You are a document assistant.
 
-    If answer not found, say:
+Answer ONLY from the provided context.
 
-    I cannot find the answer in the provided documents.
+If the answer is not found in the context, reply:
 
-    Context:
-    {context}
+I cannot find the answer in the provided documents.
 
-    Question:
-    {question}
-    """
+Context:
+{context}
+
+Question:
+{question}
+"""
 
     response = model.generate_content(
         prompt
