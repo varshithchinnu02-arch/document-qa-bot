@@ -10,9 +10,16 @@ from pypdf import PdfReader
 # -----------------------------
 load_dotenv()
 
-genai.configure(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+import streamlit as st
+
+api_key = os.getenv("GEMINI_API_KEY")
+
+if not api_key:
+    api_key = st.secrets.get("GEMINI_API_KEY")
+
+genai.configure(api_key=api_key)
+
+st.write("API Key Loaded:", bool(api_key))
 st.write("API Key Loaded:", bool(os.getenv("GEMINI_API_KEY")))
 model = genai.GenerativeModel(
     "gemini-2.5-flash"
