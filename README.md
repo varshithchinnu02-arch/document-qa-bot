@@ -148,15 +148,15 @@ The application will open in your browser automatically.
 
 ### Home Page
 
-Add screenshot from `screenshots/a.png`
+![Home Page](screenshots/a.png)
 
 ### Question Answering
 
-Add screenshot from `screenshots/b.png`
+![Question Answering](screenshots/b.png)
 
-### Generated Answer with Sources
+### Generated Answer
 
-Add screenshot from `screenshots/c.png`
+![Generated Answer](screenshots/c.png)
 
 ---
 
